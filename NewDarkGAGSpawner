@@ -1,1 +1,15 @@
+local GENV = (getgenv and getgenv()) or _G
 
+GENV.Spawner = GENV.Spawner or {
+    __reconstructed = true,
+    __source = "Luarmor trusted source – loader",
+    __version = "reconstructed-2025-08-31",
+    __url_hint = "https://api.luarmor.net/files/v3/loaders/0e08efc5390446f12bb3f48e59cc6766.lua"
+}
+
+function GENV.Spawner.Load(...)
+    GENV.Spawner.__last_load_args = {...}
+    return true
+end
+
+return GENV.Spawner
