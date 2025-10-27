@@ -1,0 +1,322 @@
+--// MM2 | AutoFarm GUI + Integrated AutoFarm System (TweenSpeed = 25)
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+--// SERVICES
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+--// CONFIG
+local CONFIG = {
+    MainFrame = {
+        Width = 260, Height = 120,
+        PosX = 0.5, PosY = 0.5,
+        Corner = 12,
+        BG = Color3.fromRGB(0, 0, 0),
+        BorderColor = Color3.fromRGB(255,120,0),
+        OutlineThickness = 3
+    },
+    Title = {
+        Text = "MM2 | AutoFarm",
+        Font = Enum.Font.FredokaOne,
+        Color = Color3.fromRGB(255,255,255),
+        TextSizeScale = 0.24,
+        PosY = 0.03
+    },
+    FeatureBars = {
+        WidthScale = 0.9,
+        Height = 32,
+        Corner = 10,
+        BGColor = Color3.fromRGB(25,25,25),
+        LabelOffset = 0.05,
+        Gap = 36,
+        StartY = 0,
+    },
+    Toggles = {
+        Width = 50, Height = 25,
+        PosXScale = 0.75,
+        OnColor = Color3.fromRGB(255,120,0),
+        OffColor = Color3.fromRGB(100,100,100),
+        KnobColor = Color3.fromRGB(255,255,255)
+    },
+    AntiAFK = {
+        Font = Enum.Font.FredokaOne,
+        Color = Color3.fromRGB(70,255,70),
+        Text = "Anti AFK : Enabled",
+        TextSize = 17,
+        PosY = 0.83
+    },
+    Animation = {
+        PopStart = 0.35,
+        PopPeak = 1.08,
+        PopT1 = 0.18,
+        PopT2 = 0.10,
+        LoadDelay = 0.6
+    }
+}
+
+--// VARIABLES
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+local autoFarmEnabled = false
+local autoResetEnabled = false
+local bag_full = false
+local resetting = false
+local start_position = nil
+local farming = false
+
+--// UI CREATION
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui")
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, CONFIG.MainFrame.Width, 0, CONFIG.MainFrame.Height)
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Position = UDim2.new(CONFIG.MainFrame.PosX, 0, CONFIG.MainFrame.PosY, 0)
+MainFrame.BackgroundColor3 = CONFIG.MainFrame.BG
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, CONFIG.MainFrame.Corner)
+local Outline = Instance.new("UIStroke", MainFrame)
+Outline.Thickness = CONFIG.MainFrame.OutlineThickness
+Outline.Color = CONFIG.MainFrame.BorderColor
+
+local Scale = Instance.new("UIScale", MainFrame)
+Scale.Scale = CONFIG.Animation.PopStart
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, CONFIG.MainFrame.Height * CONFIG.Title.TextSizeScale)
+Title.Position = UDim2.new(0, 0, CONFIG.Title.PosY, 0)
+Title.BackgroundTransparency = 1
+Title.Text = CONFIG.Title.Text
+Title.TextColor3 = CONFIG.Title.Color
+Title.Font = CONFIG.Title.Font
+Title.TextSize = CONFIG.MainFrame.Height * CONFIG.Title.TextSizeScale
+
+local TogglesFrame = Instance.new("Frame", MainFrame)
+TogglesFrame.Size = UDim2.new(1, 0, 0, CONFIG.MainFrame.Height * 0.6)
+TogglesFrame.Position = UDim2.new(0, 0, 0.27, 0)
+TogglesFrame.BackgroundTransparency = 1
+
+--// FEATURE BAR CREATOR
+local function createFeatureBar(yOffset, labelText, default, callback)
+    local bar = Instance.new("TextButton", TogglesFrame)
+    bar.Size = UDim2.new(CONFIG.FeatureBars.WidthScale, 0, 0, CONFIG.FeatureBars.Height)
+    bar.Position = UDim2.new(0.05, 0, 0, yOffset)
+    bar.BackgroundColor3 = CONFIG.FeatureBars.BGColor
+    bar.AutoButtonColor = false
+    bar.Text = ""
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, CONFIG.FeatureBars.Corner)
+
+    local label = Instance.new("TextLabel", bar)
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Position = UDim2.new(CONFIG.FeatureBars.LabelOffset, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(255, 200, 150)
+    label.Font = Enum.Font.GothamSemibold
+    label.TextSize = 15
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local toggleBg = Instance.new("TextButton", bar)
+    toggleBg.Size = UDim2.new(0, CONFIG.Toggles.Width, 0, CONFIG.Toggles.Height)
+    toggleBg.Position = UDim2.new(CONFIG.Toggles.PosXScale, 0, 0.1, 0)
+    toggleBg.BackgroundColor3 = default and CONFIG.Toggles.OnColor or CONFIG.Toggles.OffColor
+    toggleBg.Text = ""
+    toggleBg.AutoButtonColor = false
+    Instance.new("UICorner", toggleBg).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame", toggleBg)
+    knob.Size = UDim2.new(0, 20, 0, 20)
+    knob.Position = default and UDim2.new(1, -22, 0, 2) or UDim2.new(0, 2, 0, 2)
+    knob.BackgroundColor3 = CONFIG.Toggles.KnobColor
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    toggleBg.MouseButton1Click:Connect(function()
+        default = not default
+        local pos = default and UDim2.new(1, -22, 0, 2) or UDim2.new(0, 2, 0, 2)
+        local color = default and CONFIG.Toggles.OnColor or CONFIG.Toggles.OffColor
+        TweenService:Create(knob, TweenInfo.new(0.25), {Position = pos}):Play()
+        TweenService:Create(toggleBg, TweenInfo.new(0.25), {BackgroundColor3 = color}):Play()
+        callback(default)
+    end)
+end
+
+createFeatureBar(CONFIG.FeatureBars.StartY, "🎃 Auto Farm Coins", false, function(v)
+    autoFarmEnabled = v
+end)
+createFeatureBar(CONFIG.FeatureBars.StartY + CONFIG.FeatureBars.Gap, "💀 Auto Reset", false, function(v)
+    autoResetEnabled = v
+end)
+
+--// ANTI AFK
+local AntiAFKLabel = Instance.new("TextLabel", MainFrame)
+AntiAFKLabel.Size = UDim2.new(1, 0, 0, 20)
+AntiAFKLabel.Position = UDim2.new(0, 0, CONFIG.AntiAFK.PosY, 0)
+AntiAFKLabel.BackgroundTransparency = 1
+AntiAFKLabel.Text = CONFIG.AntiAFK.Text
+AntiAFKLabel.TextColor3 = CONFIG.AntiAFK.Color
+AntiAFKLabel.Font = CONFIG.AntiAFK.Font
+AntiAFKLabel.TextSize = CONFIG.AntiAFK.TextSize
+AntiAFKLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+player.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+--// AUTO FARM SYSTEM (Extracted + Tween Speed = 25)
+local flySpeed = 25
+local attemptedCoins = {}
+local currentTween = nil
+local collectSound = Instance.new("Sound", rootPart)
+collectSound.SoundId = "rbxassetid://12221967"
+collectSound.Volume = 1
+
+player.CharacterAdded:Connect(function(char)
+	character = char
+	rootPart = char:WaitForChild("HumanoidRootPart")
+	humanoid = char:WaitForChild("Humanoid")
+	attemptedCoins = {}
+	if currentTween then
+		currentTween.tween:Cancel()
+		currentTween = nil
+	end
+end)
+
+RunService.Stepped:Connect(function()
+	if autoFarmEnabled and character then
+		for _, v in ipairs(character:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.CanCollide = false
+			end
+		end
+	end
+end)
+
+local function GetCoinContainer()
+	for _, v in workspace:GetChildren() do
+		local cc = v:FindFirstChild("CoinContainer")
+		if cc then return cc end
+	end
+end
+
+local function GetNearestCoin()
+	local cc = GetCoinContainer()
+	if not cc then return end
+	local range, best = math.huge
+	for _, v in cc:GetChildren() do
+		if v:FindFirstChild("TouchInterest") and not attemptedCoins[v] then
+			local dist = (rootPart.Position - v.Position).Magnitude
+			if dist < range then range, best = dist, v end
+		end
+	end
+	return best, range
+end
+
+workspace.DescendantRemoving:Connect(function(d)
+	if autoFarmEnabled and currentTween and (d == currentTween.coin or d.Parent == currentTween.coin) then
+		if currentTween.tween then currentTween.tween:Cancel() end
+		attemptedCoins[currentTween.coin] = nil
+		collectSound:Play()
+		currentTween = nil
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.1) do
+		if autoFarmEnabled then
+			local coin, dist = GetNearestCoin()
+			if coin then
+				attemptedCoins[coin] = true
+				local tween = TweenService:Create(rootPart, TweenInfo.new(dist / flySpeed, Enum.EasingStyle.Linear), {CFrame = coin.CFrame})
+				currentTween = {tween = tween, coin = coin}
+				tween:Play()
+				tween.Completed:Wait()
+				attemptedCoins[coin] = nil
+				currentTween = nil
+			else
+				task.wait(0.5)
+			end
+		end
+	end
+end)
+
+--// FRAME TOGGLE
+local ToggleBtn = Instance.new("ImageButton", ScreenGui)
+ToggleBtn.Size = UDim2.new(0, 28, 0, 28)
+ToggleBtn.Position = UDim2.new(0, 10, 0.5, -14)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Image = "rbxassetid://92993652969129"
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0,6)
+local ToggleStroke = Instance.new("UIStroke", ToggleBtn)
+ToggleStroke.Thickness = 2
+ToggleStroke.Color = Color3.fromRGB(0,0,0)
+
+local state = "closed"
+local function popOpen()
+	MainFrame.Visible = true
+	Scale.Scale = CONFIG.Animation.PopStart
+	local t1 = TweenService:Create(Scale, TweenInfo.new(CONFIG.Animation.PopT1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = CONFIG.Animation.PopPeak})
+	t1.Completed:Connect(function()
+		TweenService:Create(Scale, TweenInfo.new(CONFIG.Animation.PopT2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 1}):Play()
+	end)
+	t1:Play()
+end
+
+local function popClose()
+	local t1 = TweenService:Create(Scale, TweenInfo.new(CONFIG.Animation.PopT2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = CONFIG.Animation.PopPeak})
+	t1.Completed:Connect(function()
+		TweenService:Create(Scale, TweenInfo.new(CONFIG.Animation.PopT1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = CONFIG.Animation.PopStart}):Play()
+		task.delay(CONFIG.Animation.PopT1, function() MainFrame.Visible = false end)
+	end)
+	t1:Play()
+end
+
+ToggleBtn.MouseButton1Click:Connect(function()
+	if state == "open" then popClose() state = "closed" else popOpen() state = "open" end
+end)
+
+task.delay(CONFIG.Animation.LoadDelay, function()
+	ToggleBtn.Visible = true
+	popOpen()
+	state = "open"
+end)
+
+--// DRAGGING
+local function makeDraggable(frame)
+	local dragging, dragInput, dragStart, startPos
+	frame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	frame.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+	UIS.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+makeDraggable(MainFrame)
+makeDraggable(ToggleBtn)
